@@ -154,10 +154,9 @@ class HeatSupplyEnvironment:
             self.action_space = Box(low=-2, high=2, shape=(1,))
             self.observation_space = Box(low=-np.inf, high=np.inf, shape=(len(self.observation_cols),))
 
-            self.device = 'cpu'
             self.reset()
 
-    def reset(self) -> tuple[torch.Tensor, dict]:
+    def reset(self) -> tuple[np.ndarray, dict]:
         self.X = self.data.resample('H').mean().dropna()
         if self.start_time is None:
             self.T = random.choice(self.X.index[:-2])
@@ -169,9 +168,9 @@ class HeatSupplyEnvironment:
         self.X.loc[self.T + 2 * H:, ['indoor_120min', 'sec_back_t_120min', 'sec_supp_t_120min']] = np.nan
         self.X.loc[self.T + 3 * H:, ['indoor_180min', 'sec_back_t_180min', 'sec_supp_t_180min']] = np.nan
         self.S: pd.Series = self.X.loc[self.T, self.observation_cols]
-        return torch.tensor(self.S.values, dtype=torch.float32, device=self.device), {}
+        return self.S.values, {}
 
-    def step(self, A: Action) -> tuple[torch.Tensor, Reward, bool, bool, dict]:
+    def step(self, A: Action) -> tuple[np.ndarray, Reward, bool, bool, dict]:
         # Apply the action to the environment
         # Return the next state, reward, done (whether the episode is finished), and additional info
         self.S = next_state = self._get_next_state(A)
@@ -180,13 +179,16 @@ class HeatSupplyEnvironment:
         done = not max(0, next_state['outdoor_60min']) < next_state['sec_supp_t_60min'] < 100
         truncated = self.T == self.end_time
         assert self.S.name == self.T
-        return torch.tensor(next_state.values, dtype=torch.float32, device=self.device), reward, done, truncated, {}
+        return next_state.values, reward, done, truncated, {}
 
     def render(self) -> None:
         print(self.X.loc[self.T, self.observation_cols])
 
     def close(self) -> None:
         print('Close')
+
+    def plot(self) -> None:
+        self.X.dropna()[['indoor', 'outdoor', 'sec_supp_t', 'sec_back_t']].plot(figsize=(15, 5), grid=True)
 
     #############################################################
 

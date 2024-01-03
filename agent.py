@@ -1,15 +1,55 @@
 import random
 import yaml
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from torch import Tensor
 import torch.optim as optim
 from torch.utils.data import Dataset
+import torch.nn.functional as F
+
+class BaseAgent(nn.Module):
+
+    @property
+    def hparams(self):
+        try:
+            return self.__hparams
+        except:
+            raise NotImplementedError
+    
+    @hparams.setter
+    def hparams(self, hparams):
+        self.__hparams = hparams
+
+    def act(self, state) -> tuple['Action', 'LogProb']:
+        raise NotImplementedError
+    
+    def training_step(self, batch, batch_idx) -> dict[str, float]:
+        raise NotImplementedError
+    
+    def setup(self):
+        pass
+
+    @classmethod
+    def load_from_checkpoint(cls, checkpoint_path: str):
+        checkpoint = torch.load(checkpoint_path)
+        agent = cls(checkpoint['hparams'])
+        agent.load_state_dict(checkpoint['model_state_dict'])
+        return agent
+
+
+#######################################################################################
+
+class ZeroAgent(BaseAgent):
+    def act(self, state):
+        return 0, None
+
+########################################################################################
 
 class Actor(nn.Module):
     def __init__(self, state_dim: int, action_dim: int, hidden_dim: tuple[int]):
-        super(Actor, self).__init__()
+        super().__init__()
         self.layers = []
         dims = (state_dim,) + hidden_dim
         for i in range(len(dims) - 1):
@@ -28,7 +68,7 @@ class Actor(nn.Module):
 
 class Critic(nn.Module):
     def __init__(self, state_dim: int, action_dim: int, hidden_dim: tuple[int]) -> None:
-        super(Critic, self).__init__()
+        super().__init__()
         self.layers = []
         dims = (state_dim + action_dim,) + hidden_dim
         for i in range(len(dims) - 1):
@@ -49,6 +89,7 @@ class ReplayBuffer(Dataset):
         self.device = device
         self.ptr = 0
         self.size = 0
+        # self.buffers = [torch.empty((max_size, ) + dim, dtype=torch.float32, device=device) for dim in dims]
         self.state = torch.empty((max_size, state_dim), dtype=torch.float32, device=device)
         self.action = torch.empty((max_size, action_dim), dtype=torch.float32, device=device)
         self.next_state = torch.empty((max_size, state_dim), dtype=torch.float32, device=device)
@@ -56,10 +97,10 @@ class ReplayBuffer(Dataset):
         self.done = torch.empty(max_size, dtype=torch.float32, device=device)
 
     def push(self, state, action, reward, next_state, done) -> None:
-        self.state[self.ptr] = state
-        self.action[self.ptr] = action
+        self.state[self.ptr] = torch.tensor(state, device=self.device)
+        self.action[self.ptr] = torch.tensor(action, device=self.device)
         self.reward[self.ptr] = reward
-        self.next_state[self.ptr] = next_state
+        self.next_state[self.ptr] = torch.tensor(next_state, device=self.device)
         self.done[self.ptr] = done
 
         self.ptr = (self.ptr + 1) % self.max_size
@@ -86,16 +127,17 @@ class ReplayBuffer(Dataset):
     def __len__(self) -> int:
         return self.size
 
+
 # DDPG Agent
-class DDPGAgent(nn.Module):
+class DDPGAgent(BaseAgent):
     def __init__(
             self, 
             state_dim: int, 
             action_dim: int, 
-            hidden_dim: tuple[int]=(128,), 
-            memory_size: int=10000,
+            hidden_dim: tuple[int]=(256, 256), 
+            memory_size: int=100000,
             lr_actor: float=1e-6,
-            lr_critic: float=1e-6,
+            lr_critic: float=1e-4,
             gamma: float=0.99,
             soft_tau: float=1e-2,
             batch_size: int=1024,
@@ -128,7 +170,11 @@ class DDPGAgent(nn.Module):
         
     def forward(self, state) -> Tensor:
         action = self.actor(state)
-        return action
+        return action, None
+    
+    def act(self, state):
+        state = torch.tensor(state, dtype=torch.float32, device=self.device)
+        return self(state)
 
     def to(self, device) -> 'DDPGAgent':
         r = super().to(device)
@@ -141,11 +187,6 @@ class DDPGAgent(nn.Module):
             return {}
         
         state, action, reward, next_state, done = self.replay_buffer.sample(self.batch_size)
-        # state = torch.stack(state)
-        # action = torch.stack(action)
-        # reward = torch.tensor(reward, dtype=torch.float32, device=self.device)
-        # next_state = torch.stack(next_state)
-        # done = torch.tensor(done, dtype=torch.float32, device=self.device)
 
         # Update Critic
         q_value = self.critic(state, action).squeeze()
@@ -170,13 +211,154 @@ class DDPGAgent(nn.Module):
             target_param.data.copy_(target_param.data * (1.0 - self.soft_tau) + param.data * self.soft_tau)
 
         return {
-            'critic_loss': critic_loss.item(), 
-            'policy_loss':policy_loss.item()
+            'Loss/Critic': critic_loss.item(), 
+            'Loss/Policy':policy_loss.item(),
         }
 
-    @classmethod
-    def load_from_checkpoint(cls, checkpoint_path: str, hparams_file):
-        agent = cls(**yaml.load(open(hparams_file), yaml.Loader))
-        agent.load_state_dict(torch.load(checkpoint_path)['model_state_dict'])
-        return agent
+    def training_step(self, batch, batch_idx):
+        state, action, log_prob, next_state, reward, done, truncated, info = batch
+        self.replay_buffer.push(state, action, reward, next_state, done)
+        metrics = self.update()
+        return metrics
+    
+########################################################################################
 
+class PolicyNetwork(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super().__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(state_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU()
+        )
+        self.mean = nn.Linear(32, action_dim)
+        self.log_std = nn.Linear(32, action_dim)
+
+    def forward(self, state):
+        x = self.fc(state)
+        mean = 2 * self.mean(x)
+        log_std = self.log_std(x)
+        std = torch.exp(log_std)
+        return mean, std
+
+
+class ContinuousPolicyGradientAgent(BaseAgent):
+    def __init__(self, state_dim, action_dim, lr=1e-3, gamma=0.5, device='cpu'):
+        super().__init__()
+        self.policy = PolicyNetwork(state_dim, action_dim)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
+        self.gamma = gamma
+        self.normal_dist = torch.distributions.Normal(loc=0, scale=1)
+        self.device = device
+        self.hparams = {
+            'state_dim': state_dim,
+            'action_dim': action_dim,
+            'lr': lr,
+            'gamma': gamma,
+        }
+
+    def forward(self, state):
+        mean, std = self.policy(state)
+        z = self.normal_dist.sample()
+        
+        y = mean + std * z 
+        log_prob = self.normal_dist.log_prob(z) - torch.log(std)
+
+        y = torch.tanh(y)
+        log_prob -= torch.log(1 - y**2 + 1e-6)
+
+        y = y * 2
+        log_prob -= np.log(2)
+
+        return y, log_prob
+    
+    def act(self, state):
+        state = torch.tensor(state, dtype=torch.float32, device=self.device)
+        return self(state)
+    
+    def update(self, rewards, log_probs):
+        log_probs = torch.cat(log_probs)
+        n = len(rewards)
+        discounts =  self.gamma ** np.arange(0, n)
+        discounted_rewards = np.empty(n, dtype=np.float32)
+        for t in range(n):
+            discounted_rewards[t] = np.dot(rewards[t:], discounts[:n-t])
+
+        policy_gradient = -torch.dot(log_probs, torch.tensor(discounted_rewards, device=self.device))
+        
+        self.optimizer.zero_grad()
+        policy_gradient.backward()
+        self.optimizer.step()
+
+        return {
+            'Loss/Policy': policy_gradient.item()
+        }
+
+    def setup(self):
+        self.log_probs = []
+        self.rewards = []
+        pass
+
+    def training_step(self, batch, batch_idx):
+        state, action, log_prob, next_state, reward, done, truncated, info = batch
+        self.log_probs.append(log_prob)
+        self.rewards.append(reward)
+        if done or truncated:
+            metrics = self.update(self.rewards, self.log_probs)
+            self.rewards.clear()
+            self.log_probs.clear()
+            return metrics
+
+
+    def to(self, device) -> 'ContinuousPolicyGradientAgent':
+        r = super().to(device)
+        r.device = device
+        return r
+
+
+########################################################################################
+
+
+class PIDAgent(BaseAgent):
+    def __init__(self, kp=1, ki=0, kd=5, indoor_col_idx=0):
+        super().__init__()
+        
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.indoor_col_idx = indoor_col_idx
+        self.hparams = {
+            'kp': kp,
+            'ki': ki,
+            'kd': kd
+        }
+
+        self.I = 0
+        self.E_ = None
+
+    def act(self, state):
+        prev_indoor = state[self.indoor_col_idx]
+        P = 22 - prev_indoor
+        self.I += P
+        if self.E_ is None:
+            self.E_ = P
+        D = P - self.E_
+        output = self.kp * P + self.ki * self.I + self.kd * D
+        self.E_ = P
+        output = min(output, 2)
+        output = max(output, -2)
+        return output, None
+        
+if __name__ == '__main__':
+    from env import make_env
+    from train import Trainer
+
+    env = make_env()
+
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+
+    agent = ContinuousPolicyGradientAgent(state_dim, action_dim)
+    trainer = Trainer(agent, env)
+    trainer.fit()
