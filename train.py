@@ -129,10 +129,18 @@ def config_parser(
     return parser
 
 
+def fix_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+
+
 if __name__ == '__main__':
 
     from agent import BaseAgent, DDPGAgent, ContinuousPolicyGradientAgent
     from env import make_env, HeatSupplyEnvironment
+
+    fix_seed(42)
 
     agent_map = {
         'DDPGAgent': DDPGAgent,
