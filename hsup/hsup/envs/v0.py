@@ -62,7 +62,7 @@ class HeatSupplyEnvV0(Env):
         self.X.loc[self.T + 2 * H:, ['indoor_120min', 'sec_back_t_120min', 'sec_supp_t_120min']] = np.nan
         self.X.loc[self.T + 3 * H:, ['indoor_180min', 'sec_back_t_180min', 'sec_supp_t_180min']] = np.nan
         self.S: pd.Series = self.X.loc[self.T, self.observation_cols]
-        return self.S.values, {}
+        return self.S.values.astype(np.float32), dict()
 
     def step(self, A: Action) -> tuple[np.ndarray, Reward, bool, bool, dict]:
         # Apply the action to the environment
@@ -73,7 +73,7 @@ class HeatSupplyEnvV0(Env):
         done = not max(0, next_state['outdoor_60min']) < next_state['sec_supp_t_60min'] < 100
         truncated = self.T == self.end_time
         assert self.S.name == self.T
-        return next_state.values, reward, done, truncated, {}
+        return next_state.values.astype(np.float32), reward, done, truncated, {}
 
     def render(self) -> None:
         print(self.X.loc[self.T, self.observation_cols])
