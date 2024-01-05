@@ -28,7 +28,7 @@ class HeatSupplyEnv(gym.Env):
             self.start_time = pd.Timestamp(start_time).round(
                 "H"
             )  # Round start_time to the nearest hour
-        self.end_time = self.data.index[-1].floor("H")
+
         self.model_indoor = model_indoor
         self.model_sec_back_t = model_sec_back_t
 
@@ -56,6 +56,8 @@ class HeatSupplyEnv(gym.Env):
         else:
             self.T = self.start_time
 
+        self.end_time = min(self.T + 24 * H, self.data.index[-1].floor("H"))
+
         self.X = self.X.loc[self.T :, self.X_cols]
         self.X.loc[self.T + 0 * H :, ["indoor", "sec_back_t", "sec_supp_t"]] = np.nan
         self.X.loc[
@@ -78,15 +80,18 @@ class HeatSupplyEnv(gym.Env):
         # Return the next state, reward, done (whether the episode is finished), and additional info
         self.S = next_state = self._get_next_state(A)
         self.T += H
+
         reward = self._get_reward(next_state)
+        truncate = self.T >= self.end_time
         done = (
             not max(0, next_state["outdoor_60min"])
             < next_state["sec_supp_t_60min"]
             < 100
-        )
-        truncated = self.T == self.end_time
+        ) or truncate
+
         assert self.S.name == self.T
-        return next_state.values.astype(np.float32), reward, done, truncated, {}
+
+        return next_state.values.astype(np.float32), reward, done, truncate, {}
 
     def render(self) -> None:
         print(self.X.loc[self.T, self.observation_cols])
