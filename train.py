@@ -14,4 +14,4 @@ env = gym.make(
 )
 
 model = PPO("MlpPolicy", env, verbose=1)
-model.learn(total_timesteps=10)
+model.learn(total_timesteps=10, progress_bar=True)
