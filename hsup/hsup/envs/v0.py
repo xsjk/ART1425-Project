@@ -41,7 +41,6 @@ class HeatSupplyEnvV0(Env):
                 self.action_space = Discrete(5, start=-2)
             else:
                 self.action_space = Box(low=-2, high=2, shape=(1,))
-
             self.reset()
 
     def reset(self, seed=None, *args, **kwargs) -> tuple[np.ndarray, dict]:
@@ -51,7 +50,7 @@ class HeatSupplyEnvV0(Env):
         else:
             self.T = self.start_time
             
-        self.end_time = min(self.T + 24 * H, self.data.index[-1].floor("H"))
+        self.end_time = self.data.index[-1].floor("H")
         
         self.X = self.X.loc[self.T:, self.X_cols]
         self.X.loc[self.T + 0 * H:, ['indoor', 'sec_back_t', 'sec_supp_t']] = np.nan
