@@ -45,9 +45,6 @@ class HeatSupplyEnvV0(Env):
             self.reset()
 
     def reset(self, seed=None, *args, **kwargs) -> tuple[np.ndarray, dict]:
-            
-        super().reset(seed=seed)
-
         self.X = self.data.resample('H').mean().dropna()
         if self.start_time is None:
             self.T = random.choice(self.X.index[:-2])
