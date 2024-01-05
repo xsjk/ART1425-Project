@@ -9,10 +9,12 @@ from sklearn.linear_model import LinearRegression
 H = pd.Timedelta("1H")
 
 
-class HeatSupplyEnv(gym.Env):
+class HeatSupplyEnvV0(gym.Env):
     State = pd.Series
     Action = float  # the increase or decrease of `sec_supp_t` per hour
     Reward = float
+
+    metadata = {"render_modes": ["human"], "render_fps": 4}
 
     def __init__(
         self,
@@ -28,6 +30,7 @@ class HeatSupplyEnv(gym.Env):
             self.start_time = pd.Timestamp(start_time).round(
                 "H"
             )  # Round start_time to the nearest hour
+        self.render_mode = "human"
 
         self.model_indoor = model_indoor
         self.model_sec_back_t = model_sec_back_t
@@ -94,7 +97,7 @@ class HeatSupplyEnv(gym.Env):
         return next_state.values.astype(np.float32), reward, done, truncate, {}
 
     def render(self) -> None:
-        print(self.X.loc[self.T, self.observation_cols])
+        # print(self.X.loc[self.T, self.observation_cols])
         self.X.dropna()[["indoor", "outdoor", "sec_supp_t", "sec_back_t"]].plot(
             figsize=(15, 5), grid=True
         )
