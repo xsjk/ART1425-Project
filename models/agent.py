@@ -351,7 +351,7 @@ class PIDAgent(BaseAgent):
         return output, None
         
 if __name__ == '__main__':
-    from env import make_env
+    from env.hsup.envs.v0 import make_env
     from train import Trainer
 
     env = make_env()

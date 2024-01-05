@@ -1,4 +1,4 @@
-from data import data
+from .data import data
 import warnings
 
 for col in [
