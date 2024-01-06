@@ -1,4 +1,4 @@
-from .data import data
+from .data import train_data as data
 import warnings
 
 for col in [
