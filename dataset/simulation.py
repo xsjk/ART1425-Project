@@ -8,12 +8,12 @@ default_dropout = 0
 default_gamma = 1e-6
 default_lr = 1e-2
 
+# sec_back_t
 # V0: [64, 64, 64, 64, 64], dropout=0, gamma=1e-4, lr=1e-2 -> 0.0091
 # V1: [64, 32, 16, 8, 4], dropout=0, gamma=1e-4, lr=1e-2 -> 0.0170
 # V2: [128, 64, 32, 16, 8], dropout=0, gamma=1e-4, lr=1e-2 -> 0.0143
 # V3: [32, 32, 32, 32, 32], dropout=0, gamma=1e-4, lr=1e-2 -> 0.0141
 # V4: [32, 16, 8, 4, 2], dropout=0, gamma=1e-4, lr=1e-2 -> 0.0124
-
 # V0: [32, 16, 8, 4, 2], dropout=0, gamma=1e-4, lr=1e-2, lr_scheduler=StepLR(step_size=10000, gamma=0.9) -> 0.0184
 # V1: [64, 64, 64, 64, 64], dropout=0, gamma=1e-4, lr=1e-2, lr_scheduler=StepLR(step_size=10000, gamma=0.9) -> 0.0126
 # V2: [64, 32, 16, 8, 4], dropout=0, gamma=1e-4, lr=1e-2, lr_scheduler=StepLR(step_size=10000, gamma=0.9) -> 0.0112
@@ -28,8 +28,8 @@ default_lr = 1e-2
 # V10: [64, 32, 16, 8, 4], dropout=0.1, gamma=1e-6, lr=1e-2, lr_scheduler=StepLR(step_size=5000, gamma=0.65) -> 0.0378
 # V11: [64, 32, 16, 8, 4], dropout=0, gamma=1e-8, lr=1e-2, lr_scheduler=StepLR(step_size=5000, gamma=0.65) -> 0.0130
 
-# V13: [64, 32, 16, 8, 4], dropout=0, gamma=1e-6, lr=1e-2, lr_scheduler=StepLR(step_size=2500, gamma=0.5)
-# V14: [64, 32, 16, 8, 4], dropout=0, gamma=1e-6, lr=1e-2, lr_scheduler=StepLR(step_size=1000, gamma=0.5)
+
+
 
 class MLPModel(pl.LightningModule):
     def __init__(self, 
@@ -84,7 +84,7 @@ class BranchModel(pl.LightningModule):
     def __init__(self, 
                 input_dim, 
                 output_dim=(1, 1),
-                hidden_dim=([64, 32], [16, 8, 4], [16, 8, 4]),
+                hidden_dim=([64, 32, 16, 8], [4], [4]),
                 dropout=default_dropout,
                 gamma=default_gamma,
                 lr=default_lr):

@@ -43,6 +43,12 @@ if __name__ == '__main__':
             model = simulation.BranchModel(input_dim=preprocess.X_branch_train.shape[1], lr=args.lr)
             trainer.fit(model, 
                         preprocess.branch_train_dataloader, 
-                        preprocess.branch_val_dataloader)         
+                        preprocess.branch_val_dataloader)   
+        case 'joint':
+            print('Training joint model')
+            model = simulation.MLPModel(input_dim=preprocess.X_branch_train.shape[1], output_dim=2, lr=args.lr)
+            trainer.fit(model, 
+                        preprocess.branch_train_dataloader, 
+                        preprocess.branch_val_dataloader)
         case _:
             raise ValueError(f'Unknown model {args.model}')
