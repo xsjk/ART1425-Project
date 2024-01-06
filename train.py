@@ -54,7 +54,7 @@ class Trainer:
             metric_lists = defaultdict(lambda:[])
             for step in count():
                 if np.random.rand() < self.epsilon:
-                    action, log_prob = self.agent.act(state)
+                    action, log_prob = self.agent.predict(state)
                     action = action.detach().cpu().numpy()
                 else:
                     action = self.env.action_space.sample()
@@ -96,7 +96,7 @@ class Trainer:
         episode_reward = 0
         rewards = []
         for step in count():
-            action, _ = self.agent.act(state)
+            action, _ = self.agent.predict(state)
             state, reward, done, truncated, info = self.env.step(action)
             rewards.append(reward)
             episode_reward += reward

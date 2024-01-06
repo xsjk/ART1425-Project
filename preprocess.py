@@ -48,7 +48,6 @@ X_indoor_columns = [
     # "indoor_90min",
     # "indoor_100min",
     # "indoor_110min",
-    "indoor_120min",
     # "diff_t_60min",
     "outdoor",
     "outdoor_60min",
@@ -57,30 +56,7 @@ X_indoor_columns = [
 
 X_sec_back_t_columns = [
     "sec_supp_t",
-    "sec_supp_t_60min",
-    "sec_supp_t_120min",
-    "sec_supp_t_180min",
-    # "sec_supp_t_flow_60min",
-    # "sec_heat_60min",
-    # "sec_flow",
-    # "sec_flow_60_min",
-    # "sec_back_t",
-    "sec_back_t_60min",
-    "sec_back_t_120min",
-    "sec_back_t_180min",
-    # "indoor_flow_60min",
-    "irradiance",
-    "irradiance_60min",
-    "irradiance_120min",
-    # "irradiance_180min",
-    # "indoor_10min",
-    "indoor_60min",
-    "indoor_120min",
-    "indoor_180min",
-    # "diff_t_60min",
-    "outdoor",
-    "outdoor_60min",
-    "outdoor_120min",
+    "sec_supp_t_120min"
 ]
 
 

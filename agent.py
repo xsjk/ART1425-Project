@@ -22,7 +22,7 @@ class BaseAgent(nn.Module):
     def hparams(self, hparams):
         self.__hparams = hparams
 
-    def act(self, state) -> tuple['Action', 'LogProb']:
+    def predict(self, state) -> tuple:
         raise NotImplementedError
     
     def training_step(self, batch, batch_idx) -> dict[str, float]:
@@ -42,8 +42,26 @@ class BaseAgent(nn.Module):
 #######################################################################################
 
 class ZeroAgent(BaseAgent):
-    def act(self, state):
+    def predict(self, state):
         return 0, None
+
+#######################################################################################
+
+class RandomAgent(BaseAgent):
+    def predict(self, state):
+        return np.random.uniform(-2, 2), None
+
+#######################################################################################
+
+class SawtoothAgent(BaseAgent):
+    i = 0
+    a = 2
+    def predict(self, state):
+        self.i += 1
+        if self.i == 12:
+            self.a *= -1
+            self.i = 0
+        return self.a, None
 
 ########################################################################################
 
@@ -172,7 +190,7 @@ class DDPGAgent(BaseAgent):
         action = self.actor(state)
         return action, None
     
-    def act(self, state):
+    def predict(self, state):
         state = torch.tensor(state, dtype=torch.float32, device=self.device)
         return self(state)
 
@@ -273,7 +291,7 @@ class ContinuousPolicyGradientAgent(BaseAgent):
 
         return y, log_prob
     
-    def act(self, state):
+    def predict(self, state):
         state = torch.tensor(state, dtype=torch.float32, device=self.device)
         return self(state)
     
@@ -337,7 +355,7 @@ class PIDAgent(BaseAgent):
         self.I = 0
         self.E_ = None
 
-    def act(self, state):
+    def predict(self, state):
         prev_indoor = state[self.indoor_col_idx]
         P = 22 - prev_indoor
         self.I += P
