@@ -17,6 +17,14 @@ def train_val_split(X: pd.DataFrame, y: pd.DataFrame) -> tuple[pd.DataFrame, pd.
     X_train, y_train = X[train_idx], y[train_idx]
     X_val, y_val = X[val_idx], y[val_idx]
 
+    nona = ~X_train.isna().any(axis=1) & ~y_train.isna()
+    X_train = X_train[nona]
+    y_train = y_train[nona]
+
+    nona = ~X_val.isna().any(axis=1) & ~y_val.isna()
+    X_val = X_val[nona]
+    y_val = y_val[nona]
+
     return X_train, y_train, X_val, y_val
 
 
@@ -70,11 +78,19 @@ X_sec_back_t_columns = [
     "outdoor_10min",
 ]
 
-
 X_indoor = data[X_indoor_columns]
-X_sec_back_t = data[X_sec_back_t_columns]
 y_indoor = data['indoor']
+
+nona = ~X_indoor.isna().any(axis=1) & ~y_indoor.isna()
+X_indoor = X_indoor[nona]
+y_indoor = y_indoor[nona]
+
+X_sec_back_t = data[X_sec_back_t_columns]
 y_sec_back_t = data['sec_back_t']
+
+nona = ~X_sec_back_t.isna().any(axis=1) & ~y_sec_back_t.isna()
+X_sec_back_t = X_sec_back_t[nona]
+y_sec_back_t = y_sec_back_t[nona]
 
 
 X_indoor, y_indoor, \
