@@ -4,15 +4,18 @@ import torch.nn.functional as F
 import torch.optim as optim
 import pytorch_lightning as pl
 
+default_dropout = 0.2
+default_gamma = 1e-4
+default_lr = 1e-2
 
 class MLPModel(pl.LightningModule):
     def __init__(self, 
                 input_dim, 
                 output_dim=1,
-                hidden_dim=[64, 64, 64],
-                dropout=0.4,
-                gamma=0.001,
-                lr=0.001):
+                hidden_dim=[64, 32, 16, 8, 4],
+                dropout=default_dropout,
+                gamma=default_gamma,
+                lr=default_lr):
         super().__init__()
 
         self.gamma = gamma
@@ -35,7 +38,7 @@ class MLPModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_pred = self(x)
-        loss = nn.functional.mse_loss(y_pred, y)
+        loss = F.mse_loss(y_pred.squeeze(), y)
         
         for param in self.parameters():
             loss += self.gamma * torch.norm(param, 2)
@@ -46,7 +49,7 @@ class MLPModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y_pred = self(x)
-        loss = F.mse_loss(y_pred, y)
+        loss = F.mse_loss(y_pred.squeeze(), y)
         self.log('val_loss', loss)
 
     def configure_optimizers(self):
@@ -57,10 +60,10 @@ class BranchModel(pl.LightningModule):
     def __init__(self, 
                 input_dim, 
                 output_dim=(1, 1),
-                hidden_dim=([64, 64], [64], [64, 64]),
-                dropout=0.4,
-                gamma=0.001,
-                lr=0.001):
+                hidden_dim=([64, 32, 16], [8, 4], [8, 4]),
+                dropout=default_dropout,
+                gamma=default_gamma,
+                lr=default_lr):
         super().__init__()
 
         self.gamma = gamma
@@ -95,6 +98,8 @@ class BranchModel(pl.LightningModule):
         layers.append(nn.Linear(hidden_dim[2][-1], output_dim[1]))
         self.branch3 = nn.Sequential(*layers)
 
+        self.save_hyperparameters()
+
     def forward(self, x):
         latent = self.branch1(x)
         y1 = self.branch2(latent)
@@ -106,7 +111,7 @@ class BranchModel(pl.LightningModule):
         y1, y2 = y.split(1, dim=1)
 
         y1_pred, y2_pred = self(x)
-        loss1 = F.mse_loss(y1_pred.squeeze(), y1) 
+        loss1 = F.mse_loss(y1_pred.squeeze(), y1)
         loss2 = F.mse_loss(y2_pred.squeeze(), y2)
         self.log('train_loss1', loss1)
         self.log('train_loss2', loss2)
