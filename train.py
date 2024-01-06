@@ -3,23 +3,25 @@ import yaml
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from rich.progress import track
-from env import make_env, HeatSupplyEnvironment
-from agent import DDPGAgent
 import os
 from itertools import count
+from collections import defaultdict
+from argparse import ArgumentParser
 
 class Trainer:
     def __init__(
             self, 
-            agent: DDPGAgent, 
-            env: HeatSupplyEnvironment, *, 
+            agent: 'BaseAgent', 
+            env: 'HeatSupplyEnvironment', *, 
             device = "auto",
             log_every_n_steps: int = 1,
             save_interval: int = 10,
             max_epochs = 1000,
             min_epochs = 0,
             epsilon = 0.25,
-            epsilon_decay = 0.95):
+            epsilon_decay = 0.95,
+            epsilon_min = 0.01
+        ):
             
         self.agent = agent
         self.env = env
@@ -29,11 +31,11 @@ class Trainer:
         self.min_epochs = min_epochs
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
+        self.epsilon_min = epsilon_min
         if device == 'auto':
             self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         
         self.agent = self.agent.to(self.device)
-        self.env.device = self.device
 
     def fit(self):
         
@@ -44,50 +46,49 @@ class Trainer:
 
         os.mkdir(f'{writer.get_logdir()}/checkpoints')
 
-        episodes = 1000
-        for episode in track(range(episodes)):
+        self.agent.setup()
+
+        for episode in track(range(self.max_epochs)):
             state, info = self.env.reset()
             episode_reward = 0
-            critic_losses = []
-            policy_losses = []
+            metric_lists = defaultdict(lambda:[])
             for step in count():
                 if np.random.rand() < self.epsilon:
-                    action = self.agent(state).detach()
+                    action, log_prob = self.agent.act(state)
+                    action = action.detach().cpu().numpy()
                 else:
-                    action = torch.tensor(self.env.action_space.sample(), dtype=torch.float32, device=self.device)
-                next_state, reward, done, truncated, info = self.env.step(action.item())
-                self.agent.replay_buffer.push(state, action, reward, next_state, done)
-                metrics = self.agent.update()  # sample from replay buffer and update the network
+                    action = self.env.action_space.sample()
+                    log_prob = torch.tensor([np.log(1/4)], device=self.device, requires_grad=True, dtype=torch.float32)
+
+                next_state, reward, done, truncated, info = self.env.step(action)
+                metrics = self.agent.training_step((state, action, log_prob, next_state, reward, done, truncated, info), step)
                 state = next_state
                 episode_reward += reward
                 if metrics:
-                    critic_losses.append(metrics['critic_loss'])
-                    policy_losses.append(metrics['policy_loss'])
+                    for k, v in metrics.items():
+                        metric_lists[k].append(v)
                 if done or truncated:
                     break
             
-            self.epsilon *= self.epsilon_decay
+            if self.epsilon > self.epsilon_min:
+                self.epsilon *= self.epsilon_decay
 
-            if critic_losses and policy_losses:
-                avg_critic_loss = np.mean(critic_losses)
-                avg_policy_loss = np.mean(policy_losses)
+            if metric_lists:
+                metrics = {k: np.mean(v) for k, v in metric_lists.items()}
+                metrics['Reward/Episode'] = episode_reward
 
                 if episode % self.log_every_n_steps == 0:
-                    writer.add_scalar('Loss/Critic', avg_critic_loss, episode)
-                    writer.add_scalar('Loss/Policy', avg_policy_loss, episode)
-                    writer.add_scalar('Reward/Episode', episode_reward, episode)
-                    print(f'Episode: {episode}\t Reward: {episode_reward:.2f}\t Average Critic Loss: {avg_critic_loss:.2f}\t Average Policy Loss: {avg_policy_loss:.2f}')
+                    for k, v in metrics.items():
+                        writer.add_scalar(k, v, episode)
+                    print(f'Episode: {episode}\t Reward: {episode_reward:.2f}')
 
                 if episode % self.save_interval == 0:
                     torch.save({
+                        'hparams': self.agent.hparams,
                         'epoch': episode,
                         'model_state_dict': self.agent.state_dict(),
-                        'metrics': {
-                            'Loss/Critic': avg_critic_loss,
-                            'Loss/Policy': avg_policy_loss,
-                            'Reward/Episode': episode_reward
-                        }
-                    }, f'{writer.get_logdir()}/checkpoints/{episode}-{episode_reward}.pth')
+                        'metrics': metrics
+                    }, f'{writer.get_logdir()}/checkpoints/{episode:03d}-{episode_reward:.2f}.pth')
                     pass
 
     def test(self, exit_on_done=True):
@@ -95,23 +96,76 @@ class Trainer:
         episode_reward = 0
         rewards = []
         for step in count():
-            action = self.agent(state)
-            state, reward, done, truncated, info = self.env.step(action.item())
-            rewards.append(rewards)
+            action, _ = self.agent.act(state)
+            state, reward, done, truncated, info = self.env.step(action)
+            rewards.append(reward)
             episode_reward += reward
             if truncated:
                 break
             if done and exit_on_done:
                 break
-        X = self.env.X.dropna()
-        X[['indoor', 'outdoor', 'sec_supp_t', 'sec_back_t']].plot(figsize=(15, 5), grid=True)
+        self.env.plot()
+        return rewards
+
+
+def config_parser(
+    parser: ArgumentParser = ArgumentParser(),
+    targets: list[str] = None,
+) -> ArgumentParser:
+
+    parser.add_argument("agent", type=str, default="DDPGAgent", choices=targets, help="the type of agent to train")
+    subparsers = parser.add_subparsers(title='Subcommands', dest='subcommand', required=True)
+
+    new_parser = subparsers.add_parser('new', help='Train a new model')
+    resume_parser = subparsers.add_parser('resume', help='Resume training a model')
+
+    resume_parser = resume_parser.add_argument_group("Resume")
+    resume_parser.add_argument("checkpoint_path", type=str, default=None)
+    
+    for p in (new_parser, resume_parser):
+        p.add_argument("--min-epochs", type=int, default=100, help="Minimum number of epochs")
+        p.add_argument("--max-epochs", type=int, default=-1, help="Maximum number of epochs")
+
+    return parser
+
+
+def fix_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
 
 
 if __name__ == '__main__':
+
+    from agent import BaseAgent, DDPGAgent, ContinuousPolicyGradientAgent
+    from env import make_env, HeatSupplyEnvironment
+
+    fix_seed(42)
+
+    agent_map = {
+        'DDPGAgent': DDPGAgent,
+        'ContinuousPolicyGradientAgent': ContinuousPolicyGradientAgent
+    }
+    parser = config_parser(targets=[
+        'DDPGAgent',
+        'ContinuousPolicyGradientAgent'
+    ])
+    args = parser.parse_args()
+    agent_type = agent_map[args.agent]
     env = make_env()
-    agent = DDPGAgent(
-        state_dim=env.observation_space.shape[0], 
-        action_dim=env.action_space.shape[0], 
-    )
-    trainer = Trainer(agent, env)
-    trainer.fit()
+
+    match args.subcommand:
+        case 'new':
+            agent = agent_type(
+                state_dim=env.observation_space.shape[0], 
+                action_dim=env.action_space.shape[0], 
+            )
+            trainer = Trainer(agent, env)
+            trainer.fit()
+            pass
+        case 'resume':
+            print('resume')
+            agent = agent_type.load_from_checkpoint(args.checkpoint_path)
+            trainer = Trainer(agent, env)
+            trainer.fit()
+            pass
