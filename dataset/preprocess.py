@@ -1,4 +1,4 @@
-from .data import train_data as data
+from .data import train_data, test_data
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, TensorDataset
@@ -28,30 +28,34 @@ def train_val_split(X: pd.DataFrame, y: pd.DataFrame) -> tuple[pd.DataFrame, pd.
 def to_tensor(*args):
     return map(lambda x: torch.tensor(x.values, dtype=torch.float32), args)
 
-for col in [
-    'sec_supp_t',
-    'sec_back_t',
-    'indoor',
-    'outdoor',
-]:
-    data[f'{col}_flow'] = data[col] * data['sec_flow']
-
-with warnings.catch_warnings(action='ignore'):
+def add_features(data):
+        
     for col in [
         'sec_supp_t',
-        'sec_supp_t_flow',
         'sec_back_t',
-        "sec_heat",
-        "sec_flow",
         'indoor',
-        'indoor_flow',
         'outdoor',
-        'outdoor_flow',
-        "irradiance",
     ]:
-        for i in range(1, 1+24):
-            data[f'{col}_{i}0min'] = data[col].shift(i)
+        data[f'{col}_flow'] = data[col] * data['sec_flow']
 
+    with warnings.catch_warnings(action='ignore'):
+        for col in [
+            'sec_supp_t',
+            'sec_supp_t_flow',
+            'sec_back_t',
+            "sec_heat",
+            "sec_flow",
+            'indoor',
+            'indoor_flow',
+            'outdoor',
+            'outdoor_flow',
+            "irradiance",
+        ]:
+            for i in range(1, 1+24):
+                data[f'{col}_{i}0min'] = data[col].shift(i)
+
+add_features(train_data)
+add_features(test_data)
 
 X_indoor_columns = [
     "sec_back_t",
@@ -78,8 +82,8 @@ X_sec_back_t_columns = [
     "outdoor_10min",
 ]
 
-X_indoor, y_indoor = drop_na(data[X_indoor_columns], data['indoor'])
-X_sec_back_t, y_sec_back_t = drop_na(data[X_sec_back_t_columns], data['sec_back_t'])
+X_indoor, y_indoor = drop_na(train_data[X_indoor_columns], train_data['indoor'])
+X_sec_back_t, y_sec_back_t = drop_na(train_data[X_sec_back_t_columns], train_data['sec_back_t'])
 
 X_indoor_train, y_indoor_train, X_indoor_val, y_indoor_val = to_tensor(*train_val_split(X_indoor, y_indoor))
 X_sec_back_t_train, y_sec_back_t_train, X_sec_back_t_val, y_sec_back_t_val = to_tensor(*train_val_split(X_sec_back_t, y_sec_back_t))
@@ -112,7 +116,7 @@ X_branch_columns = [
     "outdoor_10min",
 ]
 
-X_branch, y_branch = drop_na(data[X_branch_columns], data[['sec_back_t', 'indoor']])
+X_branch, y_branch = drop_na(train_data[X_branch_columns], train_data[['sec_back_t', 'indoor']])
 
 X_branch_train, y_branch_train, X_branch_val, y_branch_val = to_tensor(*train_val_split(X_branch, y_branch))
 

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import pytorch_lightning as pl
+import pandas as pd
 
 default_dropout = 0
 default_gamma = 1e-6
@@ -87,6 +88,10 @@ class MLPModel(pl.LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.65)
         return [optimizer], [scheduler]
+    
+    def predict(self, state: pd.Series):
+        return self(torch.tensor(state.values, dtype=torch.float32, device=self.device)).detach().cpu().numpy()
+
 
 class BranchModel(pl.LightningModule):
     def __init__(self, 
