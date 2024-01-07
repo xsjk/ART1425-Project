@@ -43,7 +43,7 @@ class MLPModel(pl.LightningModule):
     def __init__(self, 
                 input_dim, 
                 output_dim=1,
-                hidden_dim=[512, 256, 128, 64, 32, 16, 8, 4],
+                hidden_dim=[64, 32, 16, 8, 4],
                 dropout=default_dropout,
                 gamma=default_gamma,
                 lr=default_lr):
@@ -92,7 +92,7 @@ class BranchModel(pl.LightningModule):
     def __init__(self, 
                 input_dim, 
                 output_dim=(1, 1),
-                hidden_dim=([1024, 512, 256, 128, 64], [32, 16, 8, 4], [32, 16, 8, 4]),
+                hidden_dim=([128, 64, 32], [16, 8, 4], [16, 8, 4]),
                 dropout=default_dropout,
                 gamma=default_gamma,
                 lr=default_lr):
@@ -135,7 +135,7 @@ class BranchModel(pl.LightningModule):
     def forward(self, x):
         latent = self.branch1(x)
         y1 = self.branch2(latent)
-        y2 = self.branch3(torch.cat([latent, x[:, -1].unsqueeze(1)], dim=1))
+        y2 = self.branch3(torch.cat([latent, y1], dim=1))
         return y1, y2
 
     def training_step(self, batch, batch_idx):
@@ -172,3 +172,5 @@ class BranchModel(pl.LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.65)
         return [optimizer], [scheduler]
+
+

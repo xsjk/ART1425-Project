@@ -5,7 +5,9 @@ import torch.nn as nn
 from typing import Optional
 from gymnasium import Env
 from gymnasium.spaces import Box, Discrete
-from sklearn.linear_model import LinearRegression
+import torch
+
+from dataset.preprocess import X_indoor_columns, X_sec_back_t_columns
 
 H = pd.Timedelta('10min')
 
@@ -32,7 +34,7 @@ class HeatSupplyEnv(Env):
             self.model_indoor = model_indoor
             self.model_sec_back_t = model_sec_back_t
 
-            from dataset.preprocess_v2 import X_indoor_columns, X_sec_back_t_columns
+
             self.X_indoor_cols: list[str] = X_indoor_columns
             self.X_sec_back_t_cols: list[str] = X_sec_back_t_columns
             self.X_cols = list(set(self.X_indoor_cols) | set(self.X_sec_back_t_cols) | {'indoor'})
@@ -100,7 +102,13 @@ class HeatSupplyEnv(Env):
             self.X.loc[T, 'sec_supp_t_10min'] + A
         
         x = self.X.loc[T, self.X_sec_back_t_cols].to_frame().T
-        y = self.model_sec_back_t.predict(x)[0]
+        with torch.no_grad():
+            y = self.model_sec_back_t(
+                torch.tensor(
+                    x.values, 
+                    dtype=torch.float32, 
+                    device=self.model_sec_back_t.device)
+                )[0].cpu().numpy()
 
         self.X.loc[T, 'sec_back_t'] = \
         self.X.loc[T_, 'sec_back_t_10min'] = \
@@ -108,7 +116,13 @@ class HeatSupplyEnv(Env):
         self.X.loc[T___, 'sec_back_t_30min'] = y
         
         x = self.X.loc[T, self.X_indoor_cols].to_frame().T
-        y = self.model_indoor.predict(x)[0]
+        with torch.no_grad():
+            y = self.model_indoor(
+                torch.tensor(
+                    x.values, 
+                    dtype=torch.float32,
+                    device=self.model_indoor.device)
+                )[0].cpu().numpy()
 
         self.X.loc[T, 'indoor'] = \
         self.X.loc[T_, 'indoor_10min'] = \
