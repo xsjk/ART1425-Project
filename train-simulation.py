@@ -28,6 +28,7 @@ if __name__ == '__main__':
     match args.model:
         case 'split.sec_back_t':
             print('Training split.sec_back_t model')
+            # [64, 32, 16, 8, 4], dropout=0, gamma=1e-6, lr=1e-2, lr_scheduler=StepLR(step_size=5000, gamma=0.65)
             model = simulation.MLPModel(input_dim=preprocess.X_sec_back_t_train.shape[1], lr=args.lr)
             trainer.fit(model, 
                         preprocess.sec_back_t_train_dataloader, 

@@ -28,14 +28,22 @@ default_lr = 1e-2
 # V10: [64, 32, 16, 8, 4], dropout=0.1, gamma=1e-6, lr=1e-2, lr_scheduler=StepLR(step_size=5000, gamma=0.65) -> 0.0378
 # V11: [64, 32, 16, 8, 4], dropout=0, gamma=1e-8, lr=1e-2, lr_scheduler=StepLR(step_size=5000, gamma=0.65) -> 0.0130
 
+# indoor_t
+# V0: [64, 32, 16, 8, 4], dropout=0, gamma=1e-6, lr=1e-2, lr_scheduler=StepLR(step_size=5000, gamma=0.65 -> 0.0184 (best)
+# V4: [32, 16, 8, 4, 2], dropout=0, gamma=1e-6, lr=1e-2, lr_scheduler=StepLR(step_size=5000, gamma=0.65) -> 0.0182
 
 
+# branch
+
+# joint
+# V7: [64, 32, 16, 8, 4], dropout=0, gamma=1e-6, lr=1e-2, lr_scheduler=StepLR(step_size=5000, gamma=0.65) -> (0.0077, 0.0206)
+# V8: [512, 256, 128, 64, 32], dropout=0, gamma=1e-6, lr=1e-2, lr_scheduler=StepLR(step_size=5000, gamma=0.65) -> (0.0175, 0.0559)
 
 class MLPModel(pl.LightningModule):
     def __init__(self, 
                 input_dim, 
                 output_dim=1,
-                hidden_dim=[64, 32, 16, 8, 4],
+                hidden_dim=[512, 256, 128, 64, 32, 16, 8, 4],
                 dropout=default_dropout,
                 gamma=default_gamma,
                 lr=default_lr):
@@ -84,7 +92,7 @@ class BranchModel(pl.LightningModule):
     def __init__(self, 
                 input_dim, 
                 output_dim=(1, 1),
-                hidden_dim=([64, 32, 16, 8], [4], [4]),
+                hidden_dim=([1024, 512, 256, 128, 64], [32, 16, 8, 4], [32, 16, 8, 4]),
                 dropout=default_dropout,
                 gamma=default_gamma,
                 lr=default_lr):
